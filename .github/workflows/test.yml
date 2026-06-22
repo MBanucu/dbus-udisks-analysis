@@ -51,6 +51,33 @@ jobs:
           echo "=== udisksctl ==="
           which udisksctl && udisksctl dump 2>&1 | head -5 || echo "not available"
 
+      - name: Loop device diagnostics
+        run: |
+          echo "=== loop kernel module ==="
+          lsmod | grep loop || echo "loop module not loaded"
+          echo "=== max_loop ==="
+          cat /sys/module/loop/parameters/max_loop 2>/dev/null || echo "unknown (no /sys/module/loop)"
+          echo "=== /dev/loop* ==="
+          ls -la /dev/loop* 2>/dev/null | wc -l
+          ls -la /dev/loop0 /dev/loop1 /dev/loop2 2>/dev/null || echo "no numbered loop devices"
+          echo "=== loop-control ==="
+          ls -la /dev/loop-control 2>/dev/null || echo "no /dev/loop-control"
+          echo "=== losetup ==="
+          losetup -a 2>/dev/null | head -5 || echo "no loop devices attached"
+          echo "=== loop device stress test ==="
+          for i in $(seq 1 5); do
+            IMG=$(mktemp /tmp/loop-diag-XXXXXX.img)
+            dd if=/dev/zero of="$IMG" bs=1M count=1 2>/dev/null
+            mkfs.vfat "$IMG" 2>/dev/null
+            echo -n "  cycle $i: "
+            udisksctl loop-setup -f "$IMG" --no-user-interaction 2>&1 || echo "FAILED"
+            rm -f "$IMG"
+          done
+          echo "=== remaining loop devices ==="
+          losetup -a 2>/dev/null | wc -l
+          echo "=== udisksctl monitor preamble ==="
+          timeout 3 udisksctl monitor 2>&1 | head -10 || true
+
       - name: Run analysis
         run: python -m unittest discover -s tests -v
 
