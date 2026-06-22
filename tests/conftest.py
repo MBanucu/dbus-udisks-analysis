@@ -117,19 +117,19 @@ class LoopDevice:
         self.device = None
         self.device_name = None
 
-    def create(self):
+    def create(self, timeout=15):
         """Create image file and set up loop device."""
         subprocess.run(
             ['dd', 'if=/dev/zero', 'of=' + self.img_path,
              'bs=1M', 'count=1'],
-            capture_output=True, check=True)
+            capture_output=True, check=True, timeout=timeout)
         subprocess.run(
             ['mkfs.vfat', self.img_path],
-            capture_output=True, check=True)
+            capture_output=True, check=True, timeout=timeout)
         r = subprocess.run(
             ['udisksctl', 'loop-setup', '-f', self.img_path,
              '--no-user-interaction'],
-            capture_output=True, text=True)
+            capture_output=True, text=True, timeout=timeout)
         r.check_returncode()
         for line in r.stdout.splitlines():
             if '/dev/' in line:
@@ -138,45 +138,51 @@ class LoopDevice:
                 return self.device
         raise RuntimeError(f'could not parse loop-setup output:\n{r.stdout}')
 
-    def mount(self):
+    def mount(self, timeout=15):
         """Mount the loop device."""
         r = subprocess.run(
             ['udisksctl', 'mount', '-b', self.device,
              '--no-user-interaction'],
-            capture_output=True, text=True)
+            capture_output=True, text=True, timeout=timeout)
         r.check_returncode()
         return r.stdout.strip()
 
-    def unmount(self):
+    def unmount(self, timeout=15):
         """Unmount the loop device."""
         r = subprocess.run(
             ['udisksctl', 'unmount', '-b', self.device,
              '--no-user-interaction'],
-            capture_output=True, text=True)
+            capture_output=True, text=True, timeout=timeout)
         return r.returncode
 
-    def delete(self):
+    def delete(self, timeout=15):
         """Delete the loop device."""
         r = subprocess.run(
             ['udisksctl', 'loop-delete', '-b', self.device,
              '--no-user-interaction'],
-            capture_output=True, text=True)
+            capture_output=True, text=True, timeout=timeout)
         return r.returncode
 
     def cleanup(self):
         """Best-effort cleanup."""
         if self.device:
             for _ in range(3):
-                subprocess.run(
-                    ['udisksctl', 'unmount', '-b', self.device,
-                     '--no-user-interaction'],
-                    capture_output=True)
-                r = subprocess.run(
-                    ['udisksctl', 'loop-delete', '-b', self.device,
-                     '--no-user-interaction'],
-                    capture_output=True)
-                if r.returncode == 0:
-                    break
+                try:
+                    subprocess.run(
+                        ['udisksctl', 'unmount', '-b', self.device,
+                         '--no-user-interaction'],
+                        capture_output=True, timeout=10)
+                except Exception:
+                    pass
+                try:
+                    r = subprocess.run(
+                        ['udisksctl', 'loop-delete', '-b', self.device,
+                         '--no-user-interaction'],
+                        capture_output=True, timeout=10)
+                    if r.returncode == 0:
+                        break
+                except Exception:
+                    pass
                 time.sleep(0.1)
         if os.path.exists(self.img_path):
             os.unlink(self.img_path)

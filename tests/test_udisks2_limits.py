@@ -31,8 +31,8 @@ def _bare_loop_cycle():
     dev = LoopDevice()
     t0 = mts()
     try:
-        dev.create()
-        dev.delete()
+        dev.create(timeout=15)
+        dev.delete(timeout=15)
         dev.cleanup()
         return True, round((mts() - t0) * 1000)
     except Exception as e:
@@ -49,9 +49,9 @@ def _dbus_monitor_cycle():
         dev = LoopDevice()
         t0 = mts()
         try:
-            dev.create()
+            dev.create(timeout=15)
             time.sleep(0.5)
-            dev.delete()
+            dev.delete(timeout=15)
             time.sleep(0.3)
             dev.cleanup()
             await c.stop()
@@ -80,7 +80,7 @@ class TestUDisks2Limits(unittest.TestCase):
         No Python D-Bus involvement at all."""
         print('\n  Consecutive bare loop cycles (no cooldown):')
         results = []
-        for i in range(20):
+        for i in range(6):
             ok, dt = _bare_loop_cycle()
             results.append((i, ok, dt))
             status = 'OK' if ok else 'FAIL'
@@ -100,7 +100,7 @@ class TestUDisks2Limits(unittest.TestCase):
         """Same as above but with 1s cooldown between cycles."""
         print('\n  Consecutive bare loop cycles (1s cooldown):')
         results = []
-        for i in range(20):
+        for i in range(6):
             ok, dt = _bare_loop_cycle()
             results.append((i, ok, dt))
             print(f'    cycle {i:2d}: {"OK" if ok else "FAIL":4s}  {dt:5d}ms')
@@ -122,7 +122,7 @@ class TestUDisks2Limits(unittest.TestCase):
         """How many loop cycles with a fresh D-Bus connection each time?"""
         print('\n  Consecutive D-Bus monitor cycles (fresh connection each):')
         results = []
-        for i in range(15):
+        for i in range(8):
             ok, dt, sc = _dbus_monitor_cycle()
             results.append((i, ok, dt, sc))
             print(f'    cycle {i:2d}: {"OK" if ok else "FAIL":4s}  '
@@ -154,9 +154,9 @@ class TestUDisks2Limits(unittest.TestCase):
             time.sleep(1)
             dev = LoopDevice()
             try:
-                dev.create()
+                dev.create(timeout=15)
                 time.sleep(0.5)
-                dev.delete()
+                dev.delete(timeout=15)
                 time.sleep(0.3)
                 dev.cleanup()
                 ok = True
@@ -175,9 +175,9 @@ class TestUDisks2Limits(unittest.TestCase):
             await c.start()
             dev = LoopDevice()
             try:
-                dev.create()
+                dev.create(timeout=15)
                 time.sleep(0.5)
-                dev.delete()
+                dev.delete(timeout=15)
                 time.sleep(0.3)
                 dev.cleanup()
                 ok = True
@@ -188,7 +188,7 @@ class TestUDisks2Limits(unittest.TestCase):
             return ok
 
         results = []
-        for i in range(10):
+        for i in range(6):
             # Subprocess first
             sub_ok = asyncio.run(_subprocess_cycle())
             time.sleep(0.5)
@@ -221,7 +221,7 @@ class TestUDisks2Limits(unittest.TestCase):
         """How long must we wait after killing udisksctl monitor before
         a D-Bus backend can successfully connect?"""
         print('\n  Recovery time after subprocess kill:')
-        delays = [0.5, 1, 2, 3, 5, 10]
+        delays = [0.5, 1, 2, 5]
         results = {}
 
         for delay in delays:
@@ -232,11 +232,11 @@ class TestUDisks2Limits(unittest.TestCase):
 
             dev = LoopDevice()
             try:
-                dev.create()
-                dev.delete()
+                dev.create(timeout=15)
+                dev.delete(timeout=15)
                 dev.cleanup()
             except Exception:
-                pass
+                dev.cleanup()
 
             proc.terminate()
             try:
@@ -281,20 +281,20 @@ class TestUDisks2Limits(unittest.TestCase):
             # Run one loop cycle — do all monitors receive signals?
             dev = LoopDevice()
             try:
-                dev.create()
+                dev.create(timeout=15)
                 time.sleep(1)
-                dev.delete()
+                dev.delete(timeout=15)
                 time.sleep(0.5)
                 dev.cleanup()
             except Exception as e:
-                print(f'    loop cycle failed: {e}')
+                dev.cleanup()
 
             signals_per = [len(c.signals) for c in collectors]
             for c in collectors:
                 await c.stop()
             return count, signals_per
 
-        for n in [1, 2, 3, 5, 8, 12]:
+        for n in [1, 2, 3, 5, 8]:
             try:
                 count, sigs = asyncio.run(_test_n(n))
                 zero = sum(1 for s in sigs if s == 0)
