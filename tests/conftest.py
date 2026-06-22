@@ -10,7 +10,6 @@ import time
 import traceback
 from datetime import datetime
 
-import dbus_fast
 from dbus_fast.aio import MessageBus
 from dbus_fast import BusType, Message, MessageType
 
@@ -58,6 +57,11 @@ def mts() -> float:
 
 def dbus_version():
     """Return (dbus-fast version, dbus daemon info)."""
+    try:
+        from importlib.metadata import version as _pkg_version
+        fast_ver = _pkg_version('dbus-fast')
+    except Exception:
+        fast_ver = 'unknown'
     r = subprocess.run(['busctl', '--system', 'call',
                         'org.freedesktop.DBus',
                         '/org/freedesktop/DBus',
@@ -69,7 +73,7 @@ def dbus_version():
         "ps --no-headers -eo comm,pid | grep -E 'dbus-(daemon|broker)' | head -3 || echo 'none'",
         shell=True, capture_output=True, text=True)
     return {
-        'dbus_fast_version': dbus_fast.__version__,
+        'dbus_fast_version': fast_ver,
         'python_version': sys.version,
         'dbus_daemon': r2.stdout.strip(),
         'dbus_credentials': r.stdout.strip()[:300],

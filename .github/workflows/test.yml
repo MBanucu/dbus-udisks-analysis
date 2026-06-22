@@ -43,7 +43,7 @@ jobs:
           echo "=== Python ==="
           python --version
           echo "=== dbus-fast ==="
-          python -c "import dbus_fast; print(dbus_fast.__version__)"
+          python -c "from importlib.metadata import version; print(version('dbus-fast'))"
           echo "=== UDisks2 ==="
           dpkg -l udisks2 2>/dev/null || echo "not installed"
           echo "=== D-Bus daemon ==="
