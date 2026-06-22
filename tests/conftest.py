@@ -18,7 +18,7 @@ try:
 except ImportError:
     Variant = None
 
-_ADD_MATCH_FILTER = 'type=signal,sender=org.freedesktop.UDisks2'
+_ADD_MATCH_FILTER = 'type=signal'
 
 
 def add_match_message():
