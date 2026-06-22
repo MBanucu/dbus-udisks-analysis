@@ -1,0 +1,4 @@
+# dbus-udisks-analysis
+
+Comprehensive analysis of **dbus-fast** + **UDisks2** interaction patterns on Linux.
+[See full README](README.md)

@@ -1,0 +1,3 @@
+# Results Directory
+
+Test output JSON files are written here. CI uploads this as a build artifact.

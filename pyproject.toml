@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dbus-udisks-analysis"
+version = "0.1.0"
+description = "Comprehensive analysis of dbus-fast + UDisks2 interaction patterns"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = ["dbus-fast"]
+
+[project.scripts]
+signal-dumper = "tools.signal_dumper:main"
+
+[tool.setuptools.packages.find]
+include = ["tools*"]
