@@ -138,5 +138,66 @@ positives — it will just allow UDisks2 signals to arrive.
 3. **Upstream report**: File a bug against the D-Bus daemon shipping
    on Ubuntu 24.04 GitHub Actions runners about `sender=` not matching
    well-known names
-4. **Version check**: Determine the exact D-Bus daemon version and
+   4. **Version check**: Determine the exact D-Bus daemon version and
    check its changelog for sender-match behavior
+
+---
+
+## UDisks2 Crash Monitoring (2026-06-22)
+
+### Question
+
+Does UDisks2 crash under D-Bus stress on CI, and if so, when and why?
+
+### Monitoring Architecture
+
+Three-layer observation captures the full picture:
+
+| Layer | Tool | What it captures |
+|-------|------|------------------|
+| Application | `SignalCollector` (dbus-fast) | D-Bus signal delivery success/failure |
+| System logs | `LogMonitor` (journalctl, dmesg) | UDisks2 process crashes, OOM kills, kernel errors |
+| Service state | `systemctl` polls every 1s | ActiveState, SubState, PID changes |
+
+### Crash Detection Heuristics
+
+A crash is identified by any of:
+
+1. **D-Bus unresponsive**: `NameHasOwner(org.freedesktop.UDisks2)` returns false
+2. **Systemd dead state**: `ActiveState` transitions from `active` to `inactive`/`failed`/`deactivating`
+3. **Journal crash entries**: `SIGSEGV`, `SIGABRT`, `assertion failed`, `Aborted`, `core dumped`
+4. **Kernel OOM kill**: `Out of memory`, `Killed process` in dmesg
+5. **Loop-setup failure**: `udisksctl loop-setup` fails with timeout or D-Bus error
+
+### Evidence Collected
+
+Each CI run captures:
+
+- `results/crash_correlated.json` — Full correlated timeline of D-Bus events + system logs
+- `results/crash_analysis_final.json` — Structured crash analysis
+- `results/crash_evidence.md` — Human-readable findings
+- `results/system-logs/` — Raw journalctl, dmesg, systemctl output
+
+### Stress Methodologies (test_002_crash_monitor.py)
+
+| Test | Stress Vector | What it proves |
+|------|---------------|----------------|
+| `test_crash_correlated_stress` | 15 rapid loop-setup/delete cycles with D-Bus monitors | Whether combined D-Bus + loop stress crashes UDisks2 |
+| `test_loop_device_exhaustion` | Create 20 loop devices without deleting | Whether loop device limits crash UDisks2 |
+| `test_resource_exhaustion_crash` | 30 rapid cycles, monitor OOM via dmesg | Whether resource exhaustion (OOM) kills UDisks2 |
+| `test_dbus_connection_leak` | Open 30 D-Bus connections simultaneously | Whether connection exhaustion causes crash |
+| `test_signal_storm_crash` | 10 rapid mount/unmount cycles | Whether signal storm overwhelms UDisks2 |
+| `test_comprehensive_crash_analysis` | 12-cycle D-Bus stress + recovery tracking | Full lifecycle: crash detection, cause identification, recovery measurement |
+
+### Verdict (populated by CI)
+
+*This section will be updated with actual CI evidence.*
+
+| Hypothesis | Status | Evidence |
+|-----------|--------|----------|
+| H8: D-Bus connection storm crashes UDisks2 | Testing | test_dbus_connection_leak |
+| H9: Loop device exhaustion crashes UDisks2 | Testing | test_loop_device_exhaustion |
+| H10: OOM kills UDisks2 under stress | Testing | test_resource_exhaustion_crash |
+| H11: Signal storm crashes UDisks2 | Testing | test_signal_storm_crash |
+| H12: Combined stress (D-Bus + loop) crashes UDisks2 | Testing | test_comprehensive_crash_analysis |
+| H13: UDisks2 survives all stress on CI | Testing | All tests pass |

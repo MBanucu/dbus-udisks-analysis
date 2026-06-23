@@ -81,6 +81,23 @@ jobs:
       - name: Run analysis
         run: python -m unittest discover -s tests -v
 
+      - name: Collect system logs (post-test forensics)
+        if: always()
+        run: |
+          mkdir -p results/system-logs
+          echo "=== journalctl -u udisks2 ===" > results/system-logs/journal-udisks2.txt
+          journalctl -u udisks2 --no-pager -n 500 2>/dev/null >> results/system-logs/journal-udisks2.txt || echo "journalctl unavailable" >> results/system-logs/journal-udisks2.txt
+          echo "=== journalctl -k (kernel) ===" > results/system-logs/journal-kernel.txt
+          journalctl -k --no-pager -n 500 2>/dev/null >> results/system-logs/journal-kernel.txt || echo "journalctl unavailable" >> results/system-logs/journal-kernel.txt
+          echo "=== dmesg ===" > results/system-logs/dmesg.txt
+          dmesg 2>/dev/null >> results/system-logs/dmesg.txt || echo "dmesg unavailable" >> results/system-logs/dmesg.txt
+          echo "=== systemctl status udisks2 ===" > results/system-logs/systemctl-status.txt
+          systemctl status udisks2 --no-pager -l 2>/dev/null >> results/system-logs/systemctl-status.txt || echo "systemctl unavailable" >> results/system-logs/systemctl-status.txt
+          echo "=== busctl tree org.freedesktop.UDisks2 ===" > results/system-logs/busctl-tree.txt
+          busctl tree org.freedesktop.UDisks2 2>/dev/null >> results/system-logs/busctl-tree.txt || echo "busctl unavailable" >> results/system-logs/busctl-tree.txt
+          echo "=== remaining loop devices ===" > results/system-logs/losetup.txt
+          losetup -a 2>/dev/null >> results/system-logs/losetup.txt || echo "none" >> results/system-logs/losetup.txt
+
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v5
@@ -113,8 +130,20 @@ jobs:
           echo "" >> summary.md
           echo "## Artifacts" >> summary.md
           find all-results -name "*.json" | sort | while read f; do
-            count=$(python -c "import json; d=json.load(open('$f')); print(d.get('total_signals', d.get('total_signals', '?')))" 2>/dev/null || echo "?")
+            count=$(python -c "import json; d=json.load(open('$f')); print(d.get('total_signals', d.get('event_count', '?')))" 2>/dev/null || echo "?")
             echo "- **$(basename $(dirname $f))**: $f ($count events)" >> summary.md
+          done
+          echo "" >> summary.md
+          echo "## Crash Evidence" >> summary.md
+          echo "" >> summary.md
+          find all-results -name "crash_evidence.md" -o -name "crash_analysis_final.json" | sort | while read f; do
+            echo "### $(basename $(dirname $f)): $(basename $f)" >> summary.md
+          done
+          echo "" >> summary.md
+          echo "## System Logs" >> summary.md
+          echo "" >> summary.md
+          find all-results -path "*/system-logs/*" | sort | while read f; do
+            echo "- $(basename $(dirname $f))/$(basename $f)" >> summary.md
           done
 
       - name: Upload summary

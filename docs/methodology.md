@@ -70,10 +70,75 @@ Measures:
 - End-to-end signal delivery latency
 - loop-setup / loop-delete duration with and without monitoring
 
+### 7. UDisks2 Limits (`test_000_udisks2_limits.py`)
+
+Discovers UDisks2's breaking point through systematic stress:
+- Consecutive bare loop cycles (no D-Bus) — baseline for operation throughput
+- Consecutive D-Bus monitor cycles — fresh connection each cycle
+- Subprocess-to-D-Bus backend switching — simulates udisks-monitor parity tests
+- Recovery time measurement after subprocess kill
+- Max concurrent D-Bus monitors before UDisks2 becomes unresponsive
+
+### 8. Crash Recovery (`test_001_recovery.py`)
+
+Tests whether UDisks2 recovers after being crashed by D-Bus + loop stress:
+- Auto-recovery via systemd socket activation
+- Manual restart via systemctl
+- Retry loop strategy for CI test reliability
+- systemd service status before/after crash
+- D-Bus connection viability post-recovery
+
+### 9. Crash Monitoring (`test_002_crash_monitor.py`)
+
+**Three-layer monitoring** to answer "when and why does UDisks2 crash on CI?":
+
+| Layer | Tool | Frequency | Purpose |
+|-------|------|-----------|---------|
+| D-Bus | `SignalCollector` | Per-signal | Did signals arrive? |
+| System logs | `LogMonitor` (journalctl -f, dmesg -w) | Per-line | Crash messages, OOM, kernel errors |
+| Service state | `systemctl show udisks2` | Every 1 second | ActiveState transitions, PID changes |
+
+The `LogMonitor` utility (`tools/log_monitor.py`) starts background
+subprocesses for `journalctl -u udisks2 -f` and `dmesg -w`, polls
+`systemctl show` every second, and records all events with microsecond
+timestamps. This creates a correlated timeline where D-Bus operations
+can be mapped to system-level events.
+
+**Crash detection heuristics**:
+1. `NameHasOwner(org.freedesktop.UDisks2)` returns false
+2. `ActiveState` transitions from `active` to `inactive`/`failed`
+3. Journal contains `SIGSEGV`, `SIGABRT`, `assertion failed`, `core dumped`
+4. dmesg contains `Out of memory`, `Killed process`
+5. `udisksctl loop-setup` fails with timeout or D-Bus error
+
+**Stress vectors tested**:
+- Combined D-Bus + loop stress (15 rapid cycles)
+- Loop device exhaustion (20 concurrent devices)
+- Resource exhaustion / OOM (30 rapid cycles)
+- D-Bus connection leak (30 simultaneous connections)
+- Signal storm (10 rapid mount/unmount cycles)
+- Comprehensive crash + recovery lifecycle
+
 ## Data Collection
 
 Tests write structured JSON output to `results/` for offline analysis.
-CI jobs upload these as artifacts.
+CI jobs upload these as artifacts, including:
+
+- `results/*.json` — Test output data
+- `results/crash_evidence.md` — Human-readable crash findings
+- `results/system-logs/` — Raw journalctl, dmesg, systemctl output
+
+### Post-test Forensics
+
+The CI workflow runs a **forensics step** (always, even on failure) that:
+1. Captures last 500 lines of `journalctl -u udisks2`
+2. Captures last 500 lines of `journalctl -k` (kernel)
+3. Dumps `dmesg`
+4. Records `systemctl status udisks2`
+5. Captures `busctl tree org.freedesktop.UDisks2`
+6. Lists remaining loop devices (`losetup -a`)
+
+This ensures evidence is preserved even if tests crash the runner.
 
 ## No Assumptions
 
