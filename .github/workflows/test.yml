@@ -8,14 +8,18 @@ on:
   workflow_dispatch:
 
 jobs:
-  analyze:
-    name: ubuntu-latest / Python ${{ matrix.python-version }}
+  test:
+    name: Py${{ matrix.python-version }} / ${{ matrix.group }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
-
+        group:
+          - group-a
+          - group-b
+          - group-c
+          - group-d
     steps:
       - uses: actions/checkout@v6
 
@@ -38,77 +42,45 @@ jobs:
           });
           POLKIT
 
-      - name: Print system info
+      - name: Run ${{ matrix.group }} tests
         run: |
-          echo "=== Python ==="
-          python --version
-          echo "=== dbus-fast ==="
-          python -c "from importlib.metadata import version; print(version('dbus-fast'))"
-          echo "=== UDisks2 ==="
-          dpkg -l udisks2 2>/dev/null || echo "not installed"
-          echo "=== D-Bus daemon ==="
-          ps --no-headers -eo comm,pid | grep -E 'dbus-(daemon|broker)' || echo "unknown"
-          echo "=== udisksctl ==="
-          which udisksctl && udisksctl dump 2>&1 | head -5 || echo "not available"
-
-      - name: Loop device diagnostics
-        run: |
-          echo "=== loop kernel module ==="
-          lsmod | grep loop || echo "loop module not loaded"
-          echo "=== max_loop ==="
-          cat /sys/module/loop/parameters/max_loop 2>/dev/null || echo "unknown (no /sys/module/loop)"
-          echo "=== /dev/loop* ==="
-          ls -la /dev/loop* 2>/dev/null | wc -l
-          ls -la /dev/loop0 /dev/loop1 /dev/loop2 2>/dev/null || echo "no numbered loop devices"
-          echo "=== loop-control ==="
-          ls -la /dev/loop-control 2>/dev/null || echo "no /dev/loop-control"
-          echo "=== losetup ==="
-          losetup -a 2>/dev/null | head -5 || echo "no loop devices attached"
-          echo "=== loop device stress test ==="
-          for i in $(seq 1 5); do
-            IMG=$(mktemp /tmp/loop-diag-XXXXXX.img)
-            dd if=/dev/zero of="$IMG" bs=1M count=1 2>/dev/null
-            mkfs.vfat "$IMG" 2>/dev/null
-            echo -n "  cycle $i: "
-            udisksctl loop-setup -f "$IMG" --no-user-interaction 2>&1 || echo "FAILED"
-            rm -f "$IMG"
-          done
-          echo "=== remaining loop devices ==="
-          losetup -a 2>/dev/null | wc -l
-          echo "=== udisksctl monitor preamble ==="
-          timeout 3 udisksctl monitor 2>&1 | head -10 || true
-
-      - name: Run analysis
-        run: python -m unittest discover -s tests -v
+          case "${{ matrix.group }}" in
+            group-a)
+              python -m unittest tests.test_dbus_diagnostics tests.test_fix_verification tests.test_timing -v
+              ;;
+            group-b)
+              python -m unittest tests.test_raw_signals tests.test_loop_lifecycle tests.test_mount_unmount -v
+              ;;
+            group-c)
+              python -m unittest tests.test_backend_comparison tests.test_concurrent_ops tests.test_connection_stress -v
+              ;;
+            group-d)
+              python -m unittest tests.test_zz_udisks2_limits tests.test_zz_recovery tests.test_zz_crash_monitor -v
+              ;;
+          esac
 
       - name: Collect system logs (post-test forensics)
         if: always()
         run: |
           mkdir -p results/system-logs
-          echo "=== journalctl -u udisks2 ===" > results/system-logs/journal-udisks2.txt
-          journalctl -u udisks2 --no-pager -n 500 2>/dev/null >> results/system-logs/journal-udisks2.txt || echo "journalctl unavailable" >> results/system-logs/journal-udisks2.txt
-          echo "=== journalctl -k (kernel) ===" > results/system-logs/journal-kernel.txt
-          journalctl -k --no-pager -n 500 2>/dev/null >> results/system-logs/journal-kernel.txt || echo "journalctl unavailable" >> results/system-logs/journal-kernel.txt
-          echo "=== dmesg ===" > results/system-logs/dmesg.txt
-          dmesg 2>/dev/null >> results/system-logs/dmesg.txt || echo "dmesg unavailable" >> results/system-logs/dmesg.txt
-          echo "=== systemctl status udisks2 ===" > results/system-logs/systemctl-status.txt
-          systemctl status udisks2 --no-pager -l 2>/dev/null >> results/system-logs/systemctl-status.txt || echo "systemctl unavailable" >> results/system-logs/systemctl-status.txt
-          echo "=== busctl tree org.freedesktop.UDisks2 ===" > results/system-logs/busctl-tree.txt
-          busctl tree org.freedesktop.UDisks2 2>/dev/null >> results/system-logs/busctl-tree.txt || echo "busctl unavailable" >> results/system-logs/busctl-tree.txt
-          echo "=== remaining loop devices ===" > results/system-logs/losetup.txt
-          losetup -a 2>/dev/null >> results/system-logs/losetup.txt || echo "none" >> results/system-logs/losetup.txt
+          journalctl -u udisks2 --no-pager -n 500 2>/dev/null > results/system-logs/journal-udisks2.txt || true
+          journalctl -k --no-pager -n 500 2>/dev/null > results/system-logs/journal-kernel.txt || true
+          dmesg 2>/dev/null > results/system-logs/dmesg.txt || true
+          systemctl status udisks2 --no-pager -l 2>/dev/null > results/system-logs/systemctl-status.txt || true
+          busctl tree org.freedesktop.UDisks2 2>/dev/null > results/system-logs/busctl-tree.txt || true
+          losetup -a 2>/dev/null > results/system-logs/losetup.txt || true
 
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@v5
         with:
-          name: results-py${{ matrix.python-version }}
+          name: results-py${{ matrix.python-version }}-${{ matrix.group }}
           path: results/
           retention-days: 30
 
   report:
     name: Generate report
-    needs: [analyze]
+    needs: [test]
     if: always()
     runs-on: ubuntu-latest
     steps:
