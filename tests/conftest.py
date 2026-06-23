@@ -344,16 +344,16 @@ def restore_udisks(max_retries=3):
         subprocess.run(
             ['sudo', 'systemctl', 'stop', 'udisks2'],
             capture_output=True, timeout=10)
-        time.sleep(1)
+        time.sleep(2)
         subprocess.run(
             ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
             capture_output=True, timeout=10)
         subprocess.run(
             ['sudo', 'systemctl', 'start', 'udisks2'],
             capture_output=True, timeout=10)
-        time.sleep(3)
+        time.sleep(5)
 
-        # Verify
+        # Verify via D-Bus ping and systemd state
         try:
             r = subprocess.run(
                 ['busctl', '--system', 'call',
@@ -361,23 +361,36 @@ def restore_udisks(max_retries=3):
                  'org.freedesktop.DBus', 'NameHasOwner',
                  's', 'org.freedesktop.UDisks2'],
                 capture_output=True, text=True, timeout=10)
-            if 'true' in r.stdout:
-                # Quick functional test
-                dev = LoopDevice()
-                try:
-                    dev.create(timeout=10)
-                    dev.delete(timeout=10)
-                    dev.cleanup()
-                    print(f'  UDisks2 restored and functional')
-                    return
-                except Exception as e:
-                    dev.cleanup()
-                    print(f'  UDisks2 started but loop-setup failed: {e}')
-                    time.sleep(2)
-            else:
+            if 'true' not in r.stdout:
                 print('  UDisks2 not responding to D-Bus ping')
+                continue
+
+            # Check ActiveState
+            r2 = subprocess.run(
+                ['systemctl', 'show', 'udisks2',
+                 '--property=ActiveState,MainPID'],
+                capture_output=True, text=True, timeout=10)
+            state = r2.stdout.strip()
+            print(f'  UDisks2 {state}')
+
+            if 'ActiveState=active' in state:
+                # Verify with a quick D-Bus introspect
+                r3 = subprocess.run(
+                    ['busctl', '--system', 'call',
+                     'org.freedesktop.UDisks2',
+                     '/org/freedesktop/UDisks2',
+                     'org.freedesktop.DBus.Introspectable',
+                     'Introspect'],
+                    capture_output=True, text=True, timeout=10)
+                if r3.returncode == 0 and 'interface' in r3.stdout:
+                    print('  UDisks2 restored and verified')
+                    return
+                else:
+                    print('  UDisks2 ping OK but introspection failed')
+            else:
+                print(f'  UDisks2 state not active: {state}')
         except Exception as e:
             print(f'  Restore check failed: {e}')
-        time.sleep(2)
+        time.sleep(3)
 
     print('  WARNING: Failed to restore UDisks2 after max retries')

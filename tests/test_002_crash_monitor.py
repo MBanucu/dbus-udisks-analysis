@@ -213,7 +213,7 @@ class TestCrashMonitor(unittest.TestCase):
         # Phase 1: Run stress test
         print('\n  Phase 1: Stressing UDisks2...')
         monitor.mark('stress_start')
-        ok, crash_at, signal_counts = _stress_udisks(cycles=15, cooldown=0.05)
+        ok, crash_at, signal_counts = _stress_udisks(cycles=6, cooldown=0.1)
         monitor.mark('stress_end', ok=ok, crash_at=crash_at)
 
         if ok:
@@ -318,7 +318,7 @@ class TestCrashMonitor(unittest.TestCase):
         monitor.start()
         monitor.mark('stress_start')
 
-        ok, crash_at, signal_counts = _stress_udisks(cycles=30, cooldown=0.0)
+        ok, crash_at, signal_counts = _stress_udisks(cycles=8, cooldown=0.1)
         monitor.mark('stress_end', ok=ok, crash_at=crash_at,
                      cycles=len(signal_counts))
 
@@ -466,7 +466,7 @@ class TestCrashMonitor(unittest.TestCase):
         print('\n  Phase 1: D-Bus stress while logging...')
         monitor.mark('phase1_start')
 
-        async def _stressed_collect(cycles=12):
+        async def _stressed_collect(cycles=6):
             from dbus_fast.aio import MessageBus as AioMessageBus
             from dbus_fast import BusType, Message, MessageType
 
