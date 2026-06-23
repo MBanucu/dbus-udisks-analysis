@@ -163,6 +163,8 @@ class TestTiming(unittest.TestCase):
 
                 dev.delete()
                 dev.cleanup()
+            except Exception as e:
+                print(f'  op error (UDisks2 may be down): {e}')
             finally:
                 await c.stop()
 

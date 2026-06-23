@@ -162,7 +162,10 @@ class TestBackendComparison(unittest.TestCase):
         """Compare D-Bus vs udisksctl monitor for loop-delete."""
         dev = LoopDevice()
         self.addCleanup(dev.cleanup)
-        dev.create()
+        try:
+            dev.create()
+        except Exception as e:
+            self.skipTest(f'loop-setup failed, UDisks2 not responding: {e}')
         time.sleep(1)
         info = self._run_cycle('loop-delete', dev.delete)
 
