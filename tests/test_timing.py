@@ -80,10 +80,10 @@ class TestTiming(unittest.TestCase):
             try:
                 dev.create()
                 times.append((mts() - t0) * 1000)
+                dev.delete()
             except Exception as e:
                 print(f'  FAIL cycle {i}: {e}')
                 times.append(None)
-            dev.delete()
             dev.cleanup()
             time.sleep(0.2)
 
@@ -112,10 +112,10 @@ class TestTiming(unittest.TestCase):
                     try:
                         dev.create()
                         times.append((mts() - t0) * 1000)
+                        dev.delete()
                     except Exception as e:
                         print(f'  FAIL cycle {i}: {e}')
                         times.append(None)
-                    dev.delete()
                     dev.cleanup()
                     time.sleep(0.2)
                 return times

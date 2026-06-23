@@ -60,7 +60,7 @@ class TestFixVerification(unittest.TestCase):
         print_system_info()
 
     async def _collect_with_rules(self, rule_bodies):
-        """Subscribe with multiple match rules, run loop-setup, return signals."""
+        """Subscribe with multiple match rules, run loop-setup, return (signals, ops_ok)."""
         bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()
         signals = []
 
@@ -88,9 +88,11 @@ class TestFixVerification(unittest.TestCase):
                 print(f'  AddMatch FAILED: {body[:100]}')
 
         # Run operations
+        ops_ok = False
         dev = LoopDevice()
         try:
             dev.create()
+            ops_ok = True
             time.sleep(1.5)
             dev.delete()
             time.sleep(1)
@@ -99,11 +101,11 @@ class TestFixVerification(unittest.TestCase):
         dev.cleanup()
 
         bus.disconnect()
-        return signals
+        return signals, ops_ok
 
     def test_no_sender_filter_receives_udisks_signals(self):
         """Match rule without sender= should receive UDisks2 signals."""
-        signals = asyncio.run(
+        signals, ops_ok = asyncio.run(
             self._collect_with_rules([MATCH_NO_SENDER]))
 
         udisks_signals = [s for s in signals if
@@ -114,13 +116,14 @@ class TestFixVerification(unittest.TestCase):
         for s in udisks_signals[:10]:
             print(f'    {s["interface"]}.{s["member"]}  {s["path"]}')
 
-        # We expect at least some UDisks2 signals
+        if not ops_ok:
+            self.skipTest('loop-setup failed — UDisks2 not responding on this runner')
         self.assertGreater(len(udisks_signals), 0,
                            'No UDisks2 signals received even without sender filter!')
 
     def test_interface_member_filter_receives_signals(self):
         """Specific interface+member filters (no sender=) should work."""
-        signals = asyncio.run(
+        signals, ops_ok = asyncio.run(
             self._collect_with_rules([
                 MATCH_INTERFACES,
                 MATCH_PROPERTIES,
@@ -135,7 +138,7 @@ class TestFixVerification(unittest.TestCase):
         properties_changed = [s for s in signals
                              if s['member'] == 'PropertiesChanged']
         job_completed = [s for s in signals
-                         if s['member'] == 'Completed']
+                          if s['member'] == 'Completed']
 
         print(f'\n  Signals received:')
         print(f'    InterfacesAdded:   {len(interfaces_added)}')
@@ -152,7 +155,8 @@ class TestFixVerification(unittest.TestCase):
         print(f'    UDisks2 InterfacesAdded:   {len(udisks_ia)}')
         print(f'    UDisks2 PropertiesChanged: {len(udisks_pc)}')
 
-        # We expect UDisks2 events
+        if not ops_ok:
+            self.skipTest('loop-setup failed — UDisks2 not responding on this runner')
         self.assertGreater(len(udisks_ia), 0,
                            'No UDisks2 InterfacesAdded received')
         self.assertGreater(len(udisks_pc), 0,
@@ -160,7 +164,7 @@ class TestFixVerification(unittest.TestCase):
 
     def test_broad_match_filter_works(self):
         """Catch-all: type=signal with filter in handler matches udisks-monitor approach."""
-        signals = asyncio.run(
+        signals, ops_ok = asyncio.run(
             self._collect_with_rules([MATCH_NO_SENDER]))
 
         # Filter in handler (matching udisks-monitor's _on_message logic)
@@ -206,6 +210,8 @@ class TestFixVerification(unittest.TestCase):
         with open(os.path.join(RESULT_DIR, 'fix_verification.json'), 'w') as f:
             json.dump(data, f, indent=2)
 
+        if not ops_ok:
+            self.skipTest('loop-setup failed — UDisks2 not responding on this runner')
         self.assertGreater(len(udisks_sigs), 5,
                            f'Only {len(udisks_sigs)} UDisks2 signals '
                            f'(expected >5). Missing: {missing}')

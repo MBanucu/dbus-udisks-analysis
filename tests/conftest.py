@@ -140,6 +140,8 @@ class LoopDevice:
 
     def mount(self, timeout=15):
         """Mount the loop device."""
+        if self.device is None:
+            raise RuntimeError('Cannot mount: device not created')
         r = subprocess.run(
             ['udisksctl', 'mount', '-b', self.device,
              '--no-user-interaction'],
@@ -149,6 +151,8 @@ class LoopDevice:
 
     def unmount(self, timeout=15):
         """Unmount the loop device."""
+        if self.device is None:
+            return 1
         r = subprocess.run(
             ['udisksctl', 'unmount', '-b', self.device,
              '--no-user-interaction'],
@@ -157,6 +161,8 @@ class LoopDevice:
 
     def delete(self, timeout=15):
         """Delete the loop device."""
+        if self.device is None:
+            return 1
         r = subprocess.run(
             ['udisksctl', 'loop-delete', '-b', self.device,
              '--no-user-interaction'],

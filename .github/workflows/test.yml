@@ -42,6 +42,15 @@ jobs:
           });
           POLKIT
 
+      - name: Ensure UDisks2 is running
+        run: |
+          sudo systemctl reset-failed udisks2 2>/dev/null || true
+          sudo systemctl restart udisks2 2>/dev/null || sudo systemctl start udisks2 2>/dev/null || true
+          sleep 3
+          busctl --system call org.freedesktop.DBus /org/freedesktop/DBus org.freedesktop.DBus NameHasOwner s org.freedesktop.UDisks2
+          udisksctl dump > /dev/null 2>&1 || echo "WARNING: udisksctl dump failed, tests may skip"
+          sudo modprobe loop 2>/dev/null || true
+
       - name: Run ${{ matrix.group }} tests
         run: |
           case "${{ matrix.group }}" in

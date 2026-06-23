@@ -219,5 +219,9 @@ class TestBackendComparison(unittest.TestCase):
                 print(f'    EXITED with {poll}, stderr: {stderr[:300]}')
             else:
                 proc.terminate()
-                proc.wait(timeout=3)
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                proc.communicate()
                 print(f'    running OK, terminated')
