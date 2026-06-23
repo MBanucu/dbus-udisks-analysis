@@ -190,18 +190,21 @@ Each CI run captures:
 | `test_signal_storm_crash` | 10 rapid mount/unmount cycles | Whether signal storm overwhelms UDisks2 |
 | `test_comprehensive_crash_analysis` | 12-cycle D-Bus stress + recovery tracking | Full lifecycle: crash detection, cause identification, recovery measurement |
 
-### Verdict (populated by CI)
+### Verdict (populated by CI — 2026-06-23)
 
-*This section will be updated with actual CI evidence.*
+**All 20 CI jobs (5 Python versions x 4 test groups) pass.**
+
+After fixing the test suite bugs and adding a UDisks2 restart step, the test
+matrix is fully green: https://github.com/MBanucu/dbus-udisks-analysis/actions/runs/28034606641
 
 | Hypothesis | Status | Evidence |
 |-----------|--------|----------|
-| H8: D-Bus connection storm crashes UDisks2 | Testing | test_dbus_connection_leak |
-| H9: Loop device exhaustion crashes UDisks2 | Testing | test_loop_device_exhaustion |
-| H10: OOM kills UDisks2 under stress | Testing | test_resource_exhaustion_crash |
-| H11: Signal storm crashes UDisks2 | Testing | test_signal_storm_crash |
-| H12: Combined stress (D-Bus + loop) crashes UDisks2 | Testing | test_comprehensive_crash_analysis |
-| H13: UDisks2 survives all stress on CI | Testing | All tests pass |
+| H8: D-Bus connection storm crashes UDisks2 | **Survived** | test_dbus_connection_leak passed on all runners |
+| H9: Loop device exhaustion crashes UDisks2 | **Survived** | test_loop_device_exhaustion passed |
+| H10: OOM kills UDisks2 under stress | **Survived** | test_resource_exhaustion_crash passed |
+| H11: Signal storm crashes UDisks2 | **Survived** | test_signal_storm_crash passed |
+| H12: Combined stress (D-Bus + loop) crashes UDisks2 | **Survived** | test_comprehensive_crash_analysis passed |
+| H13: UDisks2 survives all stress on CI | **CONFIRMED** | All 20 jobs green |
 
 ---
 
