@@ -73,6 +73,21 @@ class TestUDisks2Limits(unittest.TestCase):
         ensure_dir(RESULT_DIR)
         print_system_info()
 
+    @classmethod
+    def tearDownClass(cls):
+        """Restore UDisks2 after stress testing so subsequent tests work."""
+        print('\n  Restoring UDisks2 after limits stress...')
+        subprocess.run(
+            ['sudo', 'systemctl', 'stop', 'udisks2'],
+            capture_output=True, timeout=10)
+        subprocess.run(
+            ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
+            capture_output=True, timeout=10)
+        subprocess.run(
+            ['sudo', 'systemctl', 'start', 'udisks2'],
+            capture_output=True, timeout=10)
+        time.sleep(2)
+
     # ── consecutive bare cycles ───────────────────────────────────
 
     def test_consecutive_bare_cycles(self):

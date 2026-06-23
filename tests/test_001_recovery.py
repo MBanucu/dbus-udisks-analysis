@@ -97,6 +97,24 @@ class TestUDisks2Recovery(unittest.TestCase):
                 shell=True)
             time.sleep(3)
 
+    @classmethod
+    def tearDownClass(cls):
+        """Restart UDisks2 so subsequent test classes aren't affected."""
+        print('\n  Restoring UDisks2 for subsequent tests...')
+        subprocess.run(
+            ['sudo', 'systemctl', 'stop', 'udisks2'],
+            capture_output=True, timeout=10)
+        time.sleep(1)
+        subprocess.run(
+            ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
+            capture_output=True, timeout=10)
+        subprocess.run(
+            ['sudo', 'systemctl', 'start', 'udisks2'],
+            capture_output=True, timeout=10)
+        time.sleep(2)
+        alive = _udisksctl_ok()
+        print(f'  UDisks2 after restore: {"ALIVE" if alive else "DEAD"}')
+
     def test_crash_and_auto_recover(self):
         """Crash UDisks2 via D-Bus stress, then wait for auto-recovery."""
         print('\n  Phase 1: Crashing UDisks2...')
