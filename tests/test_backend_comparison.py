@@ -65,6 +65,19 @@ class UdisksctlMonitorCollector:
                 self._proc.wait(timeout=3)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
+                self._proc.wait(timeout=3)
+            try:
+                self._proc.communicate()
+            except Exception:
+                pass
+            try:
+                self._proc.stdout.close()
+            except Exception:
+                pass
+            try:
+                self._proc.stderr.close()
+            except Exception:
+                pass
 
     @property
     def line_count(self):
