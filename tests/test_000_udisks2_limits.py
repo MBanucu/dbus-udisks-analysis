@@ -20,6 +20,7 @@ from tests.conftest import (
     ensure_dir,
     mts,
     print_system_info,
+    restore_udisks,
     udisksctl_available,
 )
 
@@ -76,17 +77,7 @@ class TestUDisks2Limits(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Restore UDisks2 after stress testing so subsequent tests work."""
-        print('\n  Restoring UDisks2 after limits stress...')
-        subprocess.run(
-            ['sudo', 'systemctl', 'stop', 'udisks2'],
-            capture_output=True, timeout=10)
-        subprocess.run(
-            ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
-            capture_output=True, timeout=10)
-        subprocess.run(
-            ['sudo', 'systemctl', 'start', 'udisks2'],
-            capture_output=True, timeout=10)
-        time.sleep(2)
+        restore_udisks()
 
     # ── consecutive bare cycles ───────────────────────────────────
 

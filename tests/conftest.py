@@ -321,3 +321,63 @@ def print_system_info(stream=None):
     out = stream or sys.stderr
     for k, v in info.items():
         print(f'  {k}: {v}', file=out)
+
+
+def restore_udisks(max_retries=3):
+    """Robustly restore UDisks2 after crash stress.
+
+    Cleans up dangling loop devices, stops/resets/starts UDisks2,
+    retries if it fails to come back.
+    """
+    for attempt in range(max_retries):
+        print(f'\n  Restoring UDisks2 (attempt {attempt + 1}/{max_retries})...')
+
+        # Detach any remaining loop devices first
+        subprocess.run(
+            ['sudo', 'losetup', '-D'],
+            capture_output=True, timeout=10)
+
+        # Kill any lingering udisksd processes
+        subprocess.run(
+            ['sudo', 'pkill', '-9', 'udisksd'],
+            capture_output=True, timeout=5)
+        subprocess.run(
+            ['sudo', 'systemctl', 'stop', 'udisks2'],
+            capture_output=True, timeout=10)
+        time.sleep(1)
+        subprocess.run(
+            ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
+            capture_output=True, timeout=10)
+        subprocess.run(
+            ['sudo', 'systemctl', 'start', 'udisks2'],
+            capture_output=True, timeout=10)
+        time.sleep(3)
+
+        # Verify
+        try:
+            r = subprocess.run(
+                ['busctl', '--system', 'call',
+                 'org.freedesktop.DBus', '/org/freedesktop/DBus',
+                 'org.freedesktop.DBus', 'NameHasOwner',
+                 's', 'org.freedesktop.UDisks2'],
+                capture_output=True, text=True, timeout=10)
+            if 'true' in r.stdout:
+                # Quick functional test
+                dev = LoopDevice()
+                try:
+                    dev.create(timeout=10)
+                    dev.delete(timeout=10)
+                    dev.cleanup()
+                    print(f'  UDisks2 restored and functional')
+                    return
+                except Exception as e:
+                    dev.cleanup()
+                    print(f'  UDisks2 started but loop-setup failed: {e}')
+                    time.sleep(2)
+            else:
+                print('  UDisks2 not responding to D-Bus ping')
+        except Exception as e:
+            print(f'  Restore check failed: {e}')
+        time.sleep(2)
+
+    print('  WARNING: Failed to restore UDisks2 after max retries')

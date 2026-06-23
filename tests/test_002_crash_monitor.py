@@ -24,6 +24,7 @@ from tests.conftest import (
     ensure_dir,
     mts,
     print_system_info,
+    restore_udisks,
     udisksctl_available,
 )
 
@@ -163,20 +164,7 @@ class TestCrashMonitor(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Restore UDisks2 after crash stress so following tests work."""
-        print('\n  Restoring UDisks2 after crash monitor tests...')
-        subprocess.run(
-            ['sudo', 'systemctl', 'stop', 'udisks2'],
-            capture_output=True, timeout=10)
-        time.sleep(1)
-        subprocess.run(
-            ['sudo', 'systemctl', 'reset-failed', 'udisks2'],
-            capture_output=True, timeout=10)
-        subprocess.run(
-            ['sudo', 'systemctl', 'start', 'udisks2'],
-            capture_output=True, timeout=10)
-        time.sleep(2)
-        alive = _udisks_alive()
-        print(f'  UDisks2 after restore: {"ALIVE" if alive else "DEAD"}')
+        restore_udisks()
 
     # ── baseline: journal contents before any stress ───────────────
 
