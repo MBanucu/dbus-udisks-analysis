@@ -152,7 +152,7 @@ class TestUDisks2Limits(unittest.TestCase):
         This simulates the udisks-monitor parity test pattern."""
         print('\n  Subprocess → D-Bus backend switches:')
 
-        async def _subprocess_cycle():
+        def _subprocess_cycle():
             """Spawn udisksctl monitor, run cycle, kill it."""
             proc = subprocess.Popen(
                 ['udisksctl', 'monitor'],
@@ -196,7 +196,7 @@ class TestUDisks2Limits(unittest.TestCase):
         results = []
         for i in range(6):
             # Subprocess first
-            sub_ok = asyncio.run(_subprocess_cycle())
+            sub_ok = _subprocess_cycle()
             time.sleep(0.5)
             # Then D-Bus
             try:

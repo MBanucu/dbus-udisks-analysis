@@ -131,15 +131,16 @@ positives — it will just allow UDisks2 signals to arrive.
 
 ### For this analysis repo
 
-1. **Test fix**: Add a match rule without `sender=` and verify
-   UDisks2 signals arrive on CI
-2. **Add `test_fix_verification.py`**: Compare old rule vs new rule
-   side-by-side in the same test run
+1. **Test fix** (DONE): Add a match rule without `sender=` and verify
+   UDisks2 signals arrive on CI — `conftest.py` already uses `type=signal`
+   as `_ADD_MATCH_FILTER`.
+2. **Add `test_fix_verification.py`** (DONE): Compare old rule vs new rule
+   side-by-side in the same test run.
 3. **Upstream report**: File a bug against the D-Bus daemon shipping
    on Ubuntu 24.04 GitHub Actions runners about `sender=` not matching
-   well-known names
-   4. **Version check**: Determine the exact D-Bus daemon version and
-   check its changelog for sender-match behavior
+   well-known names.
+4. **Version check**: Determine the exact D-Bus daemon version and
+   check its changelog for sender-match behavior.
 
 ---
 
@@ -201,3 +202,45 @@ Each CI run captures:
 | H11: Signal storm crashes UDisks2 | Testing | test_signal_storm_crash |
 | H12: Combined stress (D-Bus + loop) crashes UDisks2 | Testing | test_comprehensive_crash_analysis |
 | H13: UDisks2 survives all stress on CI | Testing | All tests pass |
+
+---
+
+## Test Suite Fixes (2026-06-23)
+
+### _stressed_collect: undefined variables + missing cleanup
+
+In `test_zz_crash_monitor.py`, the `_stressed_collect` coroutine could raise
+`NameError` if `AioMessageBus().connect()` failed before assigning to `bus`,
+because the except block called `bus.disconnect()` unconditionally. Additionally,
+`dev.cleanup()` was missing from the except path, potentially leaking loop devices.
+
+**Fix**: Initialize `bus = None` and `dev = None` before the try block, move
+cleanup into a `finally` block that safely checks for None.
+
+### LogMonitor.report() key mismatch
+
+The `report()` method accessed `s.get('active_state')` but `systemctl show`
+writes lowercase keys (e.g. `activestate`), so dead-state detection never matched.
+Changed to `s.get('activestate')`.
+
+### test_zz_recovery.py: missing os import
+
+Used `__import__('os')` as a workaround instead of a proper `import os`.
+Added the import and simplified `setUpClass` to use `os.path` directly.
+
+### _subprocess_cycle: unnecessary async def
+
+`_subprocess_cycle` in `test_zz_udisks2_limits.py` was declared `async def`
+but never awaited anything. Converted to a regular function and removed the
+unnecessary `asyncio.run()` wrapper at the call site.
+
+### test_rapid_connect_disconnect: legacy event loop pattern
+
+Used `asyncio.new_event_loop()` / `loop.run_until_complete()` / `loop.close()`
+instead of the standard `asyncio.run()`. Replaced with `asyncio.run()`.
+
+### signal_dumper: broken sender= filter
+
+`tools/signal_dumper.py` used `sender=org.freedesktop.UDisks2` in its AddMatch
+rule, which gets zero signals on the GitHub Actions dbus-daemon (the root cause
+identified above). Changed to `type=signal` to match the test suite fix.

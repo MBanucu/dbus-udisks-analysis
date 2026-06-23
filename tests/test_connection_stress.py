@@ -178,9 +178,6 @@ class TestConnectionStress(unittest.TestCase):
         dev = LoopDevice()
         self.addCleanup(dev.cleanup)
 
-        # Start connect/disconnect in background
-        loop = asyncio.new_event_loop()
-
         async def _test():
             # Start rapid connect/disconnect
             cd_task = asyncio.create_task(_connect_disconnect(50))
@@ -210,8 +207,7 @@ class TestConnectionStress(unittest.TestCase):
             await cd_task
             return results
 
-        results = loop.run_until_complete(_test())
-        loop.close()
+        results = asyncio.run(_test())
 
         for op, status, dt in results:
             print(f'  {op:6s}  {status:5s}  {dt:6.0f}ms')

@@ -473,6 +473,8 @@ class TestCrashMonitor(unittest.TestCase):
             ok_count = 0
             crash_at = None
             for i in range(cycles):
+                bus = None
+                dev = None
                 monitor.mark(f'cycle_{i}_start')
                 try:
                     bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()
@@ -496,15 +498,18 @@ class TestCrashMonitor(unittest.TestCase):
                 except Exception as e:
                     crash_at = i + 1
                     monitor.mark(f'cycle_{i}_fail', error=str(e)[:200])
-                    try:
-                        bus.disconnect()
-                    except Exception:
-                        pass
                     break
-                try:
-                    bus.disconnect()
-                except Exception:
-                    pass
+                finally:
+                    if dev is not None:
+                        try:
+                            dev.cleanup()
+                        except Exception:
+                            pass
+                    if bus is not None:
+                        try:
+                            bus.disconnect()
+                        except Exception:
+                            pass
                 time.sleep(0.05)
             return ok_count, crash_at
 

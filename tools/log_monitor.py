@@ -130,7 +130,7 @@ class LogMonitor:
                     crash_lines.append(e)
 
             dead_snapshots = [s for s in self._snapshots
-                              if s.get('active_state') not in ('active', None)]
+                              if s.get('activestate') not in ('active', None)]
 
         lines = []
         lines.append(f'=== LogMonitor Report ===')

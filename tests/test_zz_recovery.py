@@ -6,6 +6,7 @@ Measures:
 - Is recovery reliable enough for a retry strategy?
 """
 
+import os
 import subprocess
 import time
 import unittest
@@ -87,8 +88,7 @@ class TestUDisks2Recovery(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        ensure_dir(__import__('os').path.join(
-            __import__('os').path.dirname(__file__), '..', 'results'))
+        ensure_dir(os.path.join(os.path.dirname(__file__), '..', 'results'))
         print_system_info()
         # Ensure UDisks2 is alive before we start
         if not _udisksctl_ok():

@@ -70,7 +70,7 @@ Measures:
 - End-to-end signal delivery latency
 - loop-setup / loop-delete duration with and without monitoring
 
-### 7. UDisks2 Limits (`test_000_udisks2_limits.py`)
+### 7. UDisks2 Limits (`test_zz_udisks2_limits.py`)
 
 Discovers UDisks2's breaking point through systematic stress:
 - Consecutive bare loop cycles (no D-Bus) — baseline for operation throughput
@@ -79,7 +79,7 @@ Discovers UDisks2's breaking point through systematic stress:
 - Recovery time measurement after subprocess kill
 - Max concurrent D-Bus monitors before UDisks2 becomes unresponsive
 
-### 8. Crash Recovery (`test_001_recovery.py`)
+### 8. Crash Recovery (`test_zz_recovery.py`)
 
 Tests whether UDisks2 recovers after being crashed by D-Bus + loop stress:
 - Auto-recovery via systemd socket activation
@@ -88,7 +88,7 @@ Tests whether UDisks2 recovers after being crashed by D-Bus + loop stress:
 - systemd service status before/after crash
 - D-Bus connection viability post-recovery
 
-### 9. Crash Monitoring (`test_002_crash_monitor.py`)
+### 9. Crash Monitoring (`test_zz_crash_monitor.py`)
 
 **Three-layer monitoring** to answer "when and why does UDisks2 crash on CI?":
 
@@ -112,9 +112,9 @@ can be mapped to system-level events.
 5. `udisksctl loop-setup` fails with timeout or D-Bus error
 
 **Stress vectors tested**:
-- Combined D-Bus + loop stress (15 rapid cycles)
+- Combined D-Bus + loop stress (6 rapid cycles)
 - Loop device exhaustion (20 concurrent devices)
-- Resource exhaustion / OOM (30 rapid cycles)
+- Resource exhaustion / OOM (8 rapid cycles)
 - D-Bus connection leak (30 simultaneous connections)
 - Signal storm (10 rapid mount/unmount cycles)
 - Comprehensive crash + recovery lifecycle
