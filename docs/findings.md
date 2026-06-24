@@ -2,6 +2,23 @@
 
 *Data from CI runs at https://github.com/MBanucu/dbus-udisks-analysis*
 
+## CI Matrix: Multi-Version Testing
+
+The test matrix runs across **two UDisks2 versions** simultaneously:
+
+| Version | Source | Description |
+|---------|--------|-------------|
+| **os-default** | Ubuntu 24.04 apt package | Ships with the GitHub Actions runner image |
+| **2.10.2** | Built from source | Latest upstream release built via `apt build-dep` + `make install` |
+
+This gives **40 CI jobs** (5 Python versions x 4 test groups x 2 UDisks2 versions)
+and allows direct comparison of UDisks2 behavior across versions in identical environments.
+
+Version-specific data is captured in:
+- `results/udisks2_version_comparison.json` — runtime version, D-Bus API surface, managed object types
+- `results/system_info.json` — includes `udisks2_version` and `udisks2_test_version` fields
+- `results/udisks2_introspect.xml` — raw D-Bus introspection XML
+
 ## Root Cause Identified (2026-06-22)
 
 **`sender=org.freedesktop.UDisks2` in the AddMatch rule does NOT match
@@ -191,8 +208,6 @@ Each CI run captures:
 | `test_comprehensive_crash_analysis` | 12-cycle D-Bus stress + recovery tracking | Full lifecycle: crash detection, cause identification, recovery measurement |
 
 ### Verdict (populated by CI — 2026-06-23)
-
-**All 20 CI jobs (5 Python versions x 4 test groups) pass.**
 
 After fixing the test suite bugs and adding a UDisks2 restart step, the test
 matrix is fully green: https://github.com/MBanucu/dbus-udisks-analysis/actions/runs/28034606641

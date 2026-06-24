@@ -9,7 +9,7 @@ on:
 
 jobs:
   test:
-    name: Py${{ matrix.python-version }} / ${{ matrix.group }}
+    name: Py${{ matrix.python-version }} / ${{ matrix.group }} / udisks-${{ matrix.udisks-version }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -20,6 +20,9 @@ jobs:
           - group-b
           - group-c
           - group-d
+        udisks-version:
+          - os-default
+          - 2.10.2
     steps:
       - uses: actions/checkout@v6
 
@@ -42,6 +45,45 @@ jobs:
           });
           POLKIT
 
+      - name: Build and install udisks2 2.10.2
+        if: matrix.udisks-version == '2.10.2'
+        run: |
+          set -e
+          echo "=== Stopping system udisks2 ==="
+          sudo systemctl stop udisks2 2>/dev/null || true
+          sudo pkill -9 udisksd 2>/dev/null || true
+
+          echo "=== Enabling source repositories ==="
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's/^Types: deb$/Types: deb deb-src/' /etc/apt/sources.list.d/ubuntu.sources
+          elif [ -f /etc/apt/sources.list ]; then
+            sudo sed -i 's/^# deb-src/deb-src/' /etc/apt/sources.list
+          fi
+
+          echo "=== Installing build dependencies ==="
+          sudo apt-get update -qq
+          sudo apt-get build-dep -y -q udisks2
+          sudo apt-get install -y -q autoconf automake libtool gettext
+
+          echo "=== Downloading udisks 2.10.2 ==="
+          curl -sSL -o /tmp/udisks-2.10.2.tar.bz2 \
+            "https://github.com/storaged-project/udisks/releases/download/udisks-2.10.2/udisks-2.10.2.tar.bz2"
+          cd /tmp
+          tar xf udisks-2.10.2.tar.bz2
+          cd udisks-2.10.2
+
+          echo "=== Building ==="
+          ./configure --prefix=/usr --sysconfdir=/etc --localstatedir=/var \
+            --libexecdir=/usr/libexec --disable-static
+          make -j"$(nproc)"
+
+          echo "=== Installing ==="
+          sudo make install
+          sudo ldconfig
+
+          echo "=== Verifying installed version ==="
+          /usr/libexec/udisks2/udisksd --version || true
+
       - name: Ensure UDisks2 is running
         run: |
           sudo losetup -D 2>/dev/null || true
@@ -56,6 +98,8 @@ jobs:
           sudo modprobe loop 2>/dev/null || true
 
       - name: Run ${{ matrix.group }} tests
+        env:
+          UDISKS2_TEST_VERSION: ${{ matrix.udisks-version }}
         run: |
           case "${{ matrix.group }}" in
             group-a)
@@ -87,7 +131,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: results-py${{ matrix.python-version }}-${{ matrix.group }}
+          name: results-py${{ matrix.python-version }}-${{ matrix.group }}-udisks-${{ matrix.udisks-version }}
           path: results/
           retention-days: 30
 

@@ -20,6 +20,8 @@ from tests.conftest import (
     ensure_dir,
     mts,
     print_system_info,
+    system_info,
+    udisks2_version,
     udisksctl_available,
 )
 
@@ -312,3 +314,122 @@ class TestMatchRuleDiagnostics(unittest.TestCase):
 
         with open(os.path.join(RESULT_DIR, 'udisks2_introspect.xml'), 'w') as f:
             f.write(xml)
+
+    # ── version comparison ─────────────────────────────────────────
+
+    def test_version_comparison(self):
+        """Record UDisks2 version and API surface for cross-version comparison.
+
+        Captures the runtime version, dpkg package info, and D-Bus API
+        introspection so that CI runs on OS-default vs 2.10.2 can be
+        compared side-by-side.
+        """
+        import xml.etree.ElementTree as ET
+
+        # ── version strings ──────────────────────────────────
+        ver = udisks2_version()
+        info = system_info()
+        print(f'\n  UDisks2 version: {ver}')
+        print(f'  CI test version target: {info.get("udisks2_test_version", "unknown")}')
+        print(f'  Package: {info["udisks2_package"]}')
+        print(f'  D-Bus daemon: {info.get("dbus_daemon", "unknown")}')
+
+        # ── D-Bus API surface ─────────────────────────────────
+        interfaces = []
+        managed_objects = {}
+        api_error = None
+
+        try:
+            async def _api_surface():
+                bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()
+
+                try:
+                    reply = await bus.call(Message(
+                        destination='org.freedesktop.UDisks2',
+                        path='/org/freedesktop/UDisks2',
+                        interface='org.freedesktop.DBus.Introspectable',
+                        member='Introspect',
+                    ))
+                    xml = reply.body[0] if reply.body else ''
+                except Exception:
+                    xml = ''
+
+                try:
+                    reply2 = await bus.call(Message(
+                        destination='org.freedesktop.UDisks2',
+                        path='/org/freedesktop/UDisks2',
+                        interface='org.freedesktop.DBus.ObjectManager',
+                        member='GetManagedObjects',
+                    ))
+                    managed = reply2.body[0] if reply2.body else {}
+                except Exception:
+                    managed = {}
+
+                bus.disconnect()
+                return xml, managed
+
+            xml, managed_objects = asyncio.run(_api_surface())
+        except Exception as e:
+            api_error = str(e)
+            xml = ''
+            print(f'\n  D-Bus API query failed: {api_error}')
+
+        # ── parse introspection XML ───────────────────────────
+        try:
+            root = ET.fromstring(xml)
+            for child in root:
+                if child.tag == 'interface':
+                    name = child.attrib.get('name', '')
+                    methods = []
+                    signals = []
+                    properties = []
+                    for sub in child:
+                        if sub.tag == 'method':
+                            methods.append(sub.attrib.get('name', ''))
+                        elif sub.tag == 'signal':
+                            signals.append(sub.attrib.get('name', ''))
+                        elif sub.tag == 'property':
+                            properties.append({
+                                'name': sub.attrib.get('name', ''),
+                                'type': sub.attrib.get('type', ''),
+                                'access': sub.attrib.get('access', ''),
+                            })
+                    interfaces.append({
+                        'name': name,
+                        'methods': sorted(methods),
+                        'signals': sorted(signals),
+                        'properties': properties,
+                    })
+        except Exception as e:
+            print(f'  XML parse error: {e}')
+
+        print(f'\n  D-Bus interfaces exported: {len(interfaces)}')
+        for iface in interfaces:
+            print(f'    {iface["name"]}: '
+                  f'{len(iface["methods"])} methods, '
+                  f'{len(iface["signals"])} signals, '
+                  f'{len(iface["properties"])} props')
+
+        # ── managed object types ──────────────────────────────
+        object_types = set()
+        for path, ifaces in managed_objects.items():
+            for iface_name in ifaces:
+                parts = iface_name.rsplit('.', 1)[-1] if '.' in iface_name else iface_name
+                object_types.add(parts)
+
+        print(f'\n  Managed object interface types: {sorted(object_types)}')
+
+        # ── write results ─────────────────────────────────────
+        data = {
+            'udisks2_version': ver,
+            'udisks2_package': info['udisks2_package'],
+            'ci_udisks2_test_version': info.get('udisks2_test_version', 'unknown'),
+            'dbus_interfaces': interfaces,
+            'managed_object_types': sorted(object_types),
+            'managed_object_count': len(managed_objects),
+        }
+        if api_error:
+            data['api_error'] = api_error
+        with open(os.path.join(RESULT_DIR, 'udisks2_version_comparison.json'), 'w') as f:
+            json.dump(data, f, indent=2)
+        print(f'\n  Version comparison data written to results/udisks2_version_comparison.json')

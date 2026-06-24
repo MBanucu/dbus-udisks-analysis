@@ -11,8 +11,26 @@ happen, measure it, and report.
 - **OS**: ubuntu-latest (GitHub Actions) / local Linux
 - **Python**: 3.10 – 3.14
 - **dbus-fast**: latest from PyPI
-- **UDisks2**: system package from apt
+- **UDisks2**: OS-default (Ubuntu 24.04 apt) AND 2.10.2 (built from source)
 - **Polkit**: All UDisks2 actions allowed for the test user (required for CI)
+
+### Multi-Version Comparison
+
+The CI matrix runs every test against **two UDisks2 versions** in parallel:
+`os-default` (the apt package from the Ubuntu runner image) and `2.10.2`
+(built from upstream source via `./configure --prefix=/usr && make install`).
+
+This design serves two purposes:
+
+1. **Regression detection** — upgrades to the UDisks2 package in the runner
+   image won't silently change test outcomes; the pinned 2.10.2 source build
+   acts as a stable reference point.
+2. **Behavioral diffing** — `test_version_comparison` in `test_dbus_diagnostics`
+   captures the full D-Bus API surface (interfaces, methods, signals, properties,
+   managed object types) for each version, enabling side-by-side comparison.
+
+The `UDISKS2_TEST_VERSION` env var is set per job and recorded in
+`results/system_info.json` for automated downstream analysis.
 
 ## Test Categories
 
@@ -125,6 +143,8 @@ Tests write structured JSON output to `results/` for offline analysis.
 CI jobs upload these as artifacts, including:
 
 - `results/*.json` — Test output data
+- `results/udisks2_version_comparison.json` — Runtime version, D-Bus API surface, managed object types (per version)
+- `results/udisks2_introspect.xml` — Raw D-Bus introspection XML
 - `results/crash_evidence.md` — Human-readable crash findings
 - `results/system-logs/` — Raw journalctl, dmesg, systemctl output
 

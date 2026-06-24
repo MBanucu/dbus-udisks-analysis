@@ -80,6 +80,19 @@ def dbus_version():
     }
 
 
+def udisks2_version():
+    """Return the runtime UDisks2 version string from udisksd --version."""
+    for path in ['/usr/libexec/udisks2/udisksd', '/usr/lib/udisks2/udisksd']:
+        try:
+            r = subprocess.run([path, '--version'],
+                               capture_output=True, text=True, timeout=5)
+            if r.returncode == 0 and r.stdout.strip():
+                return r.stdout.strip()
+        except Exception:
+            continue
+    return 'unknown'
+
+
 def system_info():
     """Collect system information for test reports."""
     info = dbus_version()
@@ -87,6 +100,7 @@ def system_info():
                        capture_output=True, text=True)
     info['udisks2_package'] = (
         r.stdout.splitlines()[-1].strip() if r.stdout.strip() else 'NOT INSTALLED')
+    info['udisks2_version'] = udisks2_version()
     r2 = subprocess.run(['systemctl', 'show', 'udisks2',
                          '--property=ActiveState,SubState,MainPID'],
                         capture_output=True, text=True)
@@ -95,6 +109,7 @@ def system_info():
         info['ci'] = os.environ.get('CI', '')
         info['github_workflow'] = os.environ.get('GITHUB_WORKFLOW', '')
         info['github_run_id'] = os.environ.get('GITHUB_RUN_ID', '')
+        info['udisks2_test_version'] = os.environ.get('UDISKS2_TEST_VERSION', 'unknown')
     return info
 
 
