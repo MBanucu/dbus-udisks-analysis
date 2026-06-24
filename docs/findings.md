@@ -399,19 +399,35 @@ JobCompleted emitted during loop-setup.
 | H15: dbus-fast drops the signal | **Rejected** | `sudo busctl monitor` also misses it |
 | H16: UDisks2 crashes during loop-setup | **Rejected** | H13 confirmed UDisks2 survives stress |
 | H17: loop-setup JobCompleted is not emitted on CI | **Refuted** | `type=signal` capture shows JobCompleted IS emitted |
-| **H18: path_namespace match rule drops Job.Completed** | **Candidate** | All path_namespace observers missed it; bare type=signal caught it |
-| H19: UDisks2 degradation from prior D-Bus connections | **Candidate** | udisks-monitor signal tests run LAST after parity tests |
+| **H18: path_namespace match rule drops Job.Completed** | **REFUTED** | Side-by-side comparison on 2.10.2: bare=3 JC, path_ns=4 JC |
+| H19: UDisks2 degradation from prior D-Bus connections | **LIKELY** | udisks-monitor signal tests run LAST after parity tests |
 
-### Next Steps
+### path_namespace Comparison Result (2026-06-24)
 
-A dedicated diagnostic matching `path_namespace` vs bare `type=signal`
-will run the same loop-setup lifecycle with both match rules side-by-side
-to isolate whether the D-Bus daemon on GitHub Actions drops
-`org.freedesktop.UDisks2.Job.Completed` when `path_namespace` is present
-in the AddMatch rule.
+The `test_path_namespace_diag.py` diagnostic ran the same loop-setup+delete
+lifecycle with both match rules and compared JobCompleted counts:
 
-The CI matrix already covers both UDisks2 versions, so any version-specific
-behavior will be captured automatically.
+| UDisks2 | Python | bare JC | path_namespace JC | Dropped? |
+|---------|--------|---------|-------------------|----------|
+| 2.10.2 | 3.14 | 3 | 4 | **No** |
+| 2.10.2 | 3.12 | 3 | 4 | **No** |
+
+`path_namespace` does **not** drop `org.freedesktop.UDisks2.Job.Completed`.
+In fact, it captured slightly more — likely because the bare `type=signal`
+rule was flooded with systemd signals, reducing capture throughput.
+
+The remaining candidate is **H19: UDisks2 degradation**. The udisks-monitor
+D-Bus signal tests run after the parity tests which create 4 D-Bus
+connections via `_collect_events_with_retry('dbus')`. Each connection
+repeats loop-setup+delete. After enough cycles, UDisks2 stops emitting
+JobCompleted for loop-setup even though loop-delete JobCompleted still
+works.
+
+### Next Step
+
+A dedicated test in this suite will simulate multiple D-Bus connection
+cycles before checking loop-setup JobCompleted, to confirm degradation
+as the root cause.
 
 ---
 
