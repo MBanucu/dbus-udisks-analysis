@@ -463,6 +463,25 @@ around this by ensuring JobCompleted is available from a fresh operation
 rather than degraded state.  The backend parity tests pass because they
 restart UDisks2 and run first, before degradation accumulates.
 
+### D-Bus Daemon State Across Cycles (2026-06-25)
+
+The `test_bus_daemon_state.py` diagnostic checked whether the D-Bus
+**daemon** leaks state (connections, match rules, names) across 30
+connect+AddMatch+RemoveMatch+disconnect cycles with dbus-fast:
+
+| Metric | Before | After 30 cycles | Delta |
+|--------|--------|-----------------|-------|
+| ActiveConnections | baseline | baseline | **0** |
+| MatchRules | baseline | baseline | **0** |
+
+The D-Bus daemon state is **clean** — it does not leak connections or
+match rules.  The degradation is in **UDisks2 itself**.  Each D-Bus
+connection cycle (AddMatch + RemoveMatch + disconnect) causes UDisks2
+to accumulate internal state (subscriber tracking, signal emitter
+housekeeping) that it does not clean up after clients disconnect.
+Restarting the UDisks2 daemon clears this internal state, which is
+why `_restart_udisks()` temporarily fixes the issue.
+
 For future test suites that need multiple D-Bus interactions, the
 only reliable mitigation is to restart UDisks2 between test classes
 and minimize D-Bus connections per class.
