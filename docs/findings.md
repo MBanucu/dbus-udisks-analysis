@@ -271,6 +271,114 @@ rules returns zero signals on both 2.10.1 and 2.10.2.
 
 ---
 
+## JobCompleted Absent on loop-setup (2026-06-24)
+
+### Discovery Context
+
+While re-enabling the `TestDBusSignalCompleteness` tests in
+[udisks-monitor](https://github.com/MBanucu/udisks-monitor) on CI, four of
+six D-Bus signal completeness tests failed with "UDisks2 unresponsive".
+The tests subscribe to `org.freedesktop.UDisks2.Job.Completed` and wait for
+it after `udisksctl loop-setup`, but the signal never arrives.
+
+Meanwhile, the backend parity tests in the same test suite pass — including
+the D-Bus backend portion which checks for `JobCompleted`. The difference:
+parity tests do **loop-delete** before waiting for `JobCompleted`.
+
+### Diagnostic Method
+
+Three independent observation layers were deployed to isolate the issue:
+
+| Layer | Tool | What it observes | Result |
+|-------|------|-----------------|--------|
+| D-Bus daemon | `sudo busctl monitor --system` | All signals matching `path_namespace=/org/freedesktop/UDisks2` | 242 signals, **zero** `Completed` during loop-setup |
+| Raw dbus-fast | Direct `MessageBus` + `AddMatch` (no UdisksMonitor wrapper) | `org.freedesktop.UDisks2.Job.Completed` signals | 0 events received for loop-setup alone |
+| Subprocess backend | `udisksctl monitor` (text-based parser) | All UDisks2 events parsed from stdout | `InterfaceAdded` + `DevicePropertyChanged` seen; `JobCompleted` absent |
+
+### Key Reproduction Test
+
+```python
+# FAIL — loop-setup alone, JobCompleted never arrives (3 retries, all fail)
+def test_job_completed_from_loop_setup_alone(self):
+    for attempt in range(3):
+        got = threading.Event()
+        mon = UdisksMonitor(backend='dbus')
+        mon.subscribe(lambda _: got.set(), event_type=JobCompleted)
+        mon.start()
+        mon.ready.wait(timeout=15)
+        dev, img, _name = make_image()          # udisksctl loop-setup
+        if got.wait(timeout=15):                 # NEVER fires
+            return
+        cleanup(dev, img)
+        _restore_udisks()
+    self.fail('JobCompleted never received')
+
+# PASS — loop-delete triggers JobCompleted reliably
+def test_job_completed_from_loop_setup_then_delete(self):
+    got = threading.Event()
+    mon = UdisksMonitor(backend='dbus')
+    mon.subscribe(lambda _: got.set(), event_type=JobCompleted)
+    mon.start()
+    dev, img, _name = make_image()              # loop-setup
+    subprocess.run(['udisksctl', 'loop-delete', '-b', dev, ...])  # triggers JC
+    self.assertTrue(got.wait(timeout=15))        # FIRES within seconds
+```
+
+### Scope
+
+| Operation | JobCompleted emitted via D-Bus? | Confirmed by |
+|-----------|-------------------------------|--------------|
+| `loop-setup` | **No** | busctl monitor, dbus-fast, subprocess backend |
+| `loop-delete` | **Yes** | busctl monitor, dbus-fast, parity tests |
+
+### Root Cause
+
+The D-Bus daemon on the GitHub Actions runner (Ubuntu 24.04, dbus-daemon)
+does not deliver `org.freedesktop.UDisks2.Job.Completed` for `loop-setup`
+operations performed via UDisks2 2.10.2 built from source. The signal is
+absent at the daemon level — it is not a Python library or match-rule issue.
+
+### Hypothesis Status
+
+| Hypothesis | Status | Evidence |
+|-----------|--------|----------|
+| H14: sender= filter blocks JobCompleted | **Rejected** | Rule uses `path_namespace`, not `sender=` |
+| H15: dbus-fast drops the signal | **Rejected** | `sudo busctl monitor` also misses it |
+| H16: UDisks2 crashes during loop-setup | **Rejected** | H13 confirmed UDisks2 survives stress; InterfaceAdded still arrives |
+| H17: loop-setup JobCompleted is not emitted on CI | **CONFIRMED** | All three observation layers agree |
+
+### Impact
+
+This affects tests that subscribe to `JobCompleted` and wait for it after
+only `loop-setup`. The `udisks-monitor` test suite was fixed by including
+`loop-delete` in the event collection cycle:
+
+```python
+# In _collect_dbus_events:
+make_image()                         # loop-setup
+time.sleep(1)                        # allow signals to propagate
+subprocess.run(['udisksctl',         # loop-delete — reliably triggers
+    'loop-delete', ...])             #   JobCompleted
+# ... then wait for expected events
+```
+
+This ensures `JobCompleted` is always captured during the test cycle
+regardless of the UDisks2 version or D-Bus daemon behavior.
+
+### Open Questions
+
+1. Does the OS-default UDisks2 2.10.1 (Ubuntu 24.04 apt package) exhibit
+   the same behavior?
+2. Is this a UDisks2 bug (signal not emitted) or a dbus-daemon bug (signal
+   dropped despite being emitted)?
+3. Can the signal be observed with `dbus-monitor --system` (the reference
+   D-Bus monitor) as an additional independent observer?
+
+The CI matrix is already set up to compare 2.10.1 vs 2.10.2; a dedicated
+diagnostic job could answer question 1.
+
+---
+
 ## Test Suite Fixes (2026-06-23)
 
 ### _stressed_collect: undefined variables + missing cleanup
