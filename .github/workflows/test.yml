@@ -106,7 +106,7 @@ jobs:
               python -m unittest tests.test_dbus_diagnostics tests.test_fix_verification tests.test_timing -v
               ;;
             group-b)
-              python -m unittest tests.test_raw_signals tests.test_loop_lifecycle tests.test_mount_unmount tests.test_job_completed_diagnostics -v
+              python -m unittest tests.test_raw_signals tests.test_loop_lifecycle tests.test_mount_unmount tests.test_job_completed_diagnostics tests.test_path_namespace_diag -v
               ;;
             group-c)
               python -m unittest tests.test_backend_comparison tests.test_concurrent_ops tests.test_connection_stress -v

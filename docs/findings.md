@@ -365,17 +365,53 @@ subprocess.run(['udisksctl',         # loop-delete — reliably triggers
 This ensures `JobCompleted` is always captured during the test cycle
 regardless of the UDisks2 version or D-Bus daemon behavior.
 
-### Open Questions
+### Open Questions → Updated (2026-06-24)
 
-1. Does the OS-default UDisks2 2.10.1 (Ubuntu 24.04 apt package) exhibit
-   the same behavior?
-2. Is this a UDisks2 bug (signal not emitted) or a dbus-daemon bug (signal
-   dropped despite being emitted)?
-3. Can the signal be observed with `dbus-monitor --system` (the reference
-   D-Bus monitor) as an additional independent observer?
+The dedicated diagnostic in `test_job_completed_diagnostics.py` (added to
+CI group-b) produced a surprising result on its first run:
 
-The CI matrix is already set up to compare 2.10.1 vs 2.10.2; a dedicated
-diagnostic job could answer question 1.
+| UDisks2 version | Match Rule | loop-setup JobCompleted | loop-delete JobCompleted |
+|----------------|-----------|------------------------|-------------------------|
+| 2.10.2 (source) | `type=signal` | **1** | 1 |
+| os-default (2.10.1) | `type=signal` | **1** | 1 |
+
+Both versions emit `Job.Completed` during loop-setup when the match rule
+is `type=signal` without `path_namespace`.  This contradicts the
+udisks-monitor finding where all diagnostic layers showed zero
+JobCompleted during loop-setup.  The critical difference:
+
+| Test | Match Rule | JobCompleted from loop-setup |
+|------|-----------|----------------------------|
+| udisks-monitor signal tests | `type=signal,path_namespace=/org/freedesktop/UDisks2` | **0** |
+| udisks-monitor busctl monitor | `type=signal,path_namespace=/org/freedesktop/UDisks2` | **0** |
+| udisks-monitor dbus-fast direct | `type=signal,path_namespace=/org/freedesktop/UDisks2` | **0** |
+| **dbus-udisks-analysis** | `type=signal` | **1** |
+
+Every diagnostic that used `path_namespace` saw zero JobCompleted.
+The one diagnostic that used a bare `type=signal` match rule saw
+JobCompleted emitted during loop-setup.
+
+### Revised Hypothesis Status
+
+| Hypothesis | Status | Evidence |
+|-----------|--------|----------|
+| H14: sender= filter blocks JobCompleted | **Rejected** | Rule uses `path_namespace`, not `sender=` |
+| H15: dbus-fast drops the signal | **Rejected** | `sudo busctl monitor` also misses it |
+| H16: UDisks2 crashes during loop-setup | **Rejected** | H13 confirmed UDisks2 survives stress |
+| H17: loop-setup JobCompleted is not emitted on CI | **Refuted** | `type=signal` capture shows JobCompleted IS emitted |
+| **H18: path_namespace match rule drops Job.Completed** | **Candidate** | All path_namespace observers missed it; bare type=signal caught it |
+| H19: UDisks2 degradation from prior D-Bus connections | **Candidate** | udisks-monitor signal tests run LAST after parity tests |
+
+### Next Steps
+
+A dedicated diagnostic matching `path_namespace` vs bare `type=signal`
+will run the same loop-setup lifecycle with both match rules side-by-side
+to isolate whether the D-Bus daemon on GitHub Actions drops
+`org.freedesktop.UDisks2.Job.Completed` when `path_namespace` is present
+in the AddMatch rule.
+
+The CI matrix already covers both UDisks2 versions, so any version-specific
+behavior will be captured automatically.
 
 ---
 
