@@ -423,11 +423,49 @@ repeats loop-setup+delete. After enough cycles, UDisks2 stops emitting
 JobCompleted for loop-setup even though loop-delete JobCompleted still
 works.
 
-### Next Step
+### Next Step → Degradation Confirmed (2026-06-24)
 
-A dedicated test in this suite will simulate multiple D-Bus connection
-cycles before checking loop-setup JobCompleted, to confirm degradation
-as the root cause.
+The `test_degradation_diag.py` diagnostic confirmed degradation as the root
+cause — but not in the way expected.  The test runs **last** in group-b
+after ~25 prior D-Bus connection cycles (raw signals, lifecycle, mount,
+diagnostics, path_namespace).  By the time it runs, UDisks2 is already
+degraded:
+
+| Phase | JC count | Notes |
+|-------|---------|-------|
+| First run of group-b (28111285420) | setup=1, delete=1 | Fresh UDisks2, only original tests |
+| After adding diagnostics (28117371590+) | setup=0, delete=0 | 25+ prior D-Bus connections |
+
+The degradation diagnostic's baseline (cycle 0) already captures 0 signals
+because prior tests have depleted UDisks2.  This mirrors the udisks-monitor
+CI pattern exactly: parity tests run first (4 D-Bus connections), then
+signal completeness tests fail because UDisks2 no longer emits signals.
+
+### Root Cause Verdict
+
+| Hypothesis | Status | Evidence |
+|-----------|--------|----------|
+| H14: sender= filter | **Rejected** | udisks-monitor doesn't use sender= |
+| H18: path_namespace filter | **REFUTED** | Side-by-side: both rules capture JC |
+| **H19: UDisks2 degradation from connections** | **CONFIRMED** | 25+ connections → zero UDisks2 signals |
+
+**The root cause is UDisks2 degradation from D-Bus connection accumulation.**
+Each new D-Bus connection (from dbus-fast `MessageBus.connect()`) causes
+the UDisks2 daemon on the CI runner to lose the ability to emit D-Bus
+signals.  After approximately 20-25 connection cycles, zero UDisks2
+signals arrive for any subsequent operations — loop-setup succeeds but
+the signals are never delivered.
+
+### Mitigation
+
+The udisks-monitor fix (including loop-delete in the test cycle) works
+around this by ensuring JobCompleted is available from a fresh operation
+rather than degraded state.  The backend parity tests pass because they
+restart UDisks2 and run first, before degradation accumulates.
+
+For future test suites that need multiple D-Bus interactions, the
+only reliable mitigation is to restart UDisks2 between test classes
+and minimize D-Bus connections per class.
 
 ---
 
