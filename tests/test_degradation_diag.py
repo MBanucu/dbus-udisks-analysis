@@ -57,7 +57,7 @@ async def _dbus_cycle():
 
 
 async def _check_job_completed():
-    """Connect, do loop-setup only, collect signals, check for JobCompleted."""
+    """Connect, do loop-setup+delete, collect signals, check for JobCompleted."""
     bus = await AioMessageBus(bus_type=BusType.SYSTEM).connect()
     signals = []
 
@@ -86,6 +86,8 @@ async def _check_job_completed():
     dev = LoopDevice()
     try:
         dev.create()
+        time.sleep(0.5)
+        dev.delete()
         ops_ok = True
         time.sleep(1.5)
     except Exception:
