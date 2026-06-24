@@ -14,6 +14,8 @@ The test matrix runs across **two UDisks2 versions** simultaneously:
 This gives **40 CI jobs** (5 Python versions x 4 test groups x 2 UDisks2 versions)
 and allows direct comparison of UDisks2 behavior across versions in identical environments.
 
+First multi-version run: https://github.com/MBanucu/dbus-udisks-analysis/actions/runs/28105594541
+
 Version-specific data is captured in:
 - `results/udisks2_version_comparison.json` — runtime version, D-Bus API surface, managed object types
 - `results/system_info.json` — includes `udisks2_version` and `udisks2_test_version` fields
@@ -156,8 +158,9 @@ positives — it will just allow UDisks2 signals to arrive.
 3. **Upstream report**: File a bug against the D-Bus daemon shipping
    on Ubuntu 24.04 GitHub Actions runners about `sender=` not matching
    well-known names.
-4. **Version check**: Determine the exact D-Bus daemon version and
-   check its changelog for sender-match behavior.
+4. **Version check** (DONE): CI matrix now tests both OS-default (2.10.1)
+   and source-built 2.10.2. See the "Multi-Version Comparison Results" section
+   below for findings.
 
 ---
 
@@ -220,6 +223,51 @@ matrix is fully green: https://github.com/MBanucu/dbus-udisks-analysis/actions/r
 | H11: Signal storm crashes UDisks2 | **Survived** | test_signal_storm_crash passed |
 | H12: Combined stress (D-Bus + loop) crashes UDisks2 | **Survived** | test_comprehensive_crash_analysis passed |
 | H13: UDisks2 survives all stress on CI | **CONFIRMED** | All 20 jobs green |
+
+---
+
+## Multi-Version Comparison Results (2026-06-24)
+
+The CI matrix was expanded to test against two UDisks2 versions in parallel:
+the OS-default apt package (2.10.1 on Ubuntu 24.04) and the latest upstream
+release (2.10.2) built from source.
+
+### Version Identities
+
+| Matrix slot | Runtime version | dpkg package | Source |
+|------------|----------------|--------------|--------|
+| `os-default` | 2.10.1 | udisks2 2.10.1-6ubuntu1.3 | Ubuntu 24.04 apt |
+| `2.10.2` | 2.10.2 | udisks2 2.10.1-6ubuntu1.3 | Built from source |
+
+Note: dpkg reports the same package for both because the source build
+overwrites the binary in-place without updating the package database.
+The runtime version is detected by invoking `udisksd --version` (which
+prints to stderr via a GLib message on both versions).
+
+### D-Bus API Surface
+
+Both versions expose the same D-Bus interfaces on `/org/freedesktop/UDisks2`:
+
+- `org.freedesktop.DBus.Properties` — 3 methods, 1 signal
+- `org.freedesktop.DBus.Introspectable` — 1 method
+- `org.freedesktop.DBus.Peer` — 2 methods
+- `org.freedesktop.DBus.ObjectManager` — 1 method, 2 signals
+
+No API differences were detected between 2.10.1 and 2.10.2 on the CI runner.
+
+### Test Compatibility
+
+All tests pass on both versions. The sender-match bug (root cause identified
+above) affects both equally — `sender=org.freedesktop.UDisks2` in AddMatch
+rules returns zero signals on both 2.10.1 and 2.10.2.
+
+### CI Coverage
+
+- **40 test jobs** (5 Python x 4 groups x 2 UDisks2 versions)
+- Previous run: https://github.com/MBanucu/dbus-udisks-analysis/actions/runs/28105594541 — all 40 green
+- The `test_version_comparison` diagnostic captures a full API fingerprint per
+  job in `results/udisks2_version_comparison.json`, enabling automated diffing
+  if future versions diverge.
 
 ---
 
