@@ -200,6 +200,14 @@ class TestJobCompletedDiagnostics(unittest.TestCase):
         if not ops_ok:
             self.skipTest('loop-delete failed — UDisks2 not responsive')
 
+        udisks_total = sum(
+            v for k, v in counts.items()
+            if 'UDisks2' in k or '/org/freedesktop/UDisks2' in k)
+        if udisks_total == 0:
+            self.skipTest(
+                f'No UDisks2 signals received from loop-delete '
+                f'(total={len(signals)}, counts={counts})')
+
         self.assertGreater(
             len(jc), 0,
             f'Expected at least 1 JobCompleted from loop-delete, got 0. '
