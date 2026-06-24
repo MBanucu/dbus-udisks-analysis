@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -81,15 +82,34 @@ def dbus_version():
 
 
 def udisks2_version():
-    """Return the runtime UDisks2 version string from udisksd --version."""
+    """Return the runtime UDisks2 version string.
+
+    Invokes udisksd at known paths. udisksd rejects --version as an
+    invalid option but prints the version to stderr before exiting, so
+    we capture both stdout and stderr and accept non-zero return codes.
+    Falls back to dpkg-query for the apt package version.
+    """
     for path in ['/usr/libexec/udisks2/udisksd', '/usr/lib/udisks2/udisksd']:
         try:
             r = subprocess.run([path, '--version'],
                                capture_output=True, text=True, timeout=5)
-            if r.returncode == 0 and r.stdout.strip():
-                return r.stdout.strip()
+            out = (r.stdout + r.stderr)
+            # udisksd 2.10.x prints: "udisks daemon version X.Y.Z exiting"
+            m = re.search(r'(?:udisks\s+daemon\s+version|udisksd)\s+([\d.]+)', out)
+            if m:
+                return m.group(1)
+            if out.strip():
+                return out.strip().splitlines()[0].strip()
         except Exception:
             continue
+    # Fall back to dpkg version
+    try:
+        r = subprocess.run(['dpkg-query', '-W', '-f=${Version}', 'udisks2'],
+                           capture_output=True, text=True, timeout=5)
+        if r.returncode == 0 and r.stdout.strip():
+            return 'dpkg: ' + r.stdout.strip()
+    except Exception:
+        pass
     return 'unknown'
 
 
