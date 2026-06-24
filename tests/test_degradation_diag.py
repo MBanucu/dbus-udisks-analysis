@@ -21,7 +21,6 @@ from tests.conftest import (
     LoopDevice,
     ensure_dir,
     print_system_info,
-    restore_udisks,
     udisksctl_available,
 )
 
@@ -112,8 +111,7 @@ class TestDegradationDiagnostic(unittest.TestCase):
     def test_job_completed_after_connection_cycles(self):
         results = []
 
-        # Cycle 0: baseline — check JobCompleted on fresh UDisks2
-        restore_udisks()
+        # Cycle 0: baseline — check JobCompleted on current UDisks2
         jc, total, ops_ok = asyncio.run(_check_job_completed())
         results.append({
             'cycle': 0, 'phase': 'check',
